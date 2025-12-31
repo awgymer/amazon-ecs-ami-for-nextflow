@@ -114,7 +114,7 @@ fmt: packer shfmt
 
 .PHONY: static-check
 static-check: packer-fmt shfmt shellcheck
-	REGION=us-west-2 make validate
+	REGION=ap-southeast-2 make validate
 	./shfmt -d -s -w -i 4 ./*.sh ./scripts/*.sh ./scripts/*/*.sh
 	./shellcheck --severity=error --exclude=SC2045 ./*.sh ./*/*.sh ./*/*/*.sh
 
