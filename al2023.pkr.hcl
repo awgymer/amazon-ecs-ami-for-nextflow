@@ -137,6 +137,10 @@ build {
     script = "scripts/install-additional-packages.sh"
   }
 
+  provisioner "shell" {
+    script = "scripts/install-awscli.sh"
+  }
+
   ### exec
 
   provisioner "file" {

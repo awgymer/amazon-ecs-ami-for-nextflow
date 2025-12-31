@@ -15,13 +15,13 @@ locals {
 variable "ami_name_prefix_al2" {
   type        = string
   description = "Outputted AMI name prefix."
-  default     = "unofficial-amzn2-ami-ecs"
+  default     = "nextflow-amzn2-ami-ecs"
 }
 
 variable "ami_name_prefix_al2023" {
   type        = string
   description = "Outputted AMI name prefix."
-  default     = "unofficial-amzn2023-ami-ecs"
+  default     = "nextflow-amzn2023-ami-ecs"
 }
 
 variable "ami_version_al2" {
@@ -166,7 +166,7 @@ variable "ecs_init_local_override" {
 variable "general_purpose_instance_type" {
   type        = string
   description = "Instance type used to build for general-purpose platform"
-  default     = "c5.large"
+  default     = "c5.2xlarge"
 }
 
 variable "gpu_instance_type" {
