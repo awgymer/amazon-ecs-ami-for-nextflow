@@ -34,10 +34,12 @@ jobs:
     - name: Build AMI
       run: REGION=${{ vars.AWS_REGION }} make ${{ matrix.variant }}
     - name: Publish AMI ID to SSM
+      env:
+        DEPLOY_ENV: ${{ github.environment }}
       run: |
         ami_id=$(jq -r '.builds[-1].artifact_id | split(":")[1]' manifest.json)
         aws ssm put-parameter \
-          --name "/${{ github.environment }}/ecs-ami/${{ vars.AWS_REGION }}/${{ matrix.variant }}/latest" \
+          --name "/${DEPLOY_ENV}/ecs-ami/${{ vars.AWS_REGION }}/${{ matrix.variant }}/latest" \
           --value "$ami_id" \
           --type String \
           --overwrite
