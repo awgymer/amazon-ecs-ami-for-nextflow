@@ -5,3 +5,5 @@ shfmt
 shellcheck
 *.idea
 *.DS_Store
+
+devcontainer.env
