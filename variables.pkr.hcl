@@ -45,6 +45,18 @@ variable "block_device_size_gb" {
   default     = 30
 }
 
+variable "block_device_iops" {
+  type        = number
+  description = "Provisioned IOPS of the root block device"
+  default     = 3000
+}
+
+variable "block_device_throughput" {
+  type        = number
+  description = "Provisioned throughput of the root block device"
+  default     = 125
+}
+
 variable "ecs_agent_version" {
   type        = string
   description = "ECS agent version to build AMI with."

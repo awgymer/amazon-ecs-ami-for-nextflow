@@ -18,6 +18,8 @@ source "amazon-ebs" "al2023" {
   custom_endpoint_ec2 = var.custom_endpoint_ec2
   launch_block_device_mappings {
     volume_size           = var.block_device_size_gb
+    iops                  = var.block_device_iops
+    throughput            = var.block_device_throughput
     delete_on_termination = true
     volume_type           = "gp3"
     device_name           = "/dev/xvda"
