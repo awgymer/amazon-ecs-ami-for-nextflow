@@ -45,6 +45,7 @@ All secrets and variables are configured per GitHub environment. Navigate to **S
 | `AMI_GENERATE_CONFIG_ROLE` | `initiaterelease.yml` | ARN of an IAM role assumed by GitHub Actions via OIDC to run the update check. Needs permissions to describe EC2 images, query SSM parameters, launch/terminate EC2 instances, and send SSM Run Commands. |
 | `IAM_INSTANCE_PROFILE_ARN` | `initiaterelease.yml` | ARN of an EC2 instance profile attached to the temporary probe instances launched during the update check. Attach the AWS managed policy `AmazonSSMManagedInstanceCore` to the underlying role. |
 | `PACKER_ROLE_ARN` | `build.yml` | ARN of an IAM role assumed by GitHub Actions via OIDC to run Packer builds. Needs EC2 permissions for AMI creation (see [HashiCorp's minimal Packer IAM policy](https://developer.hashicorp.com/packer/integrations/hashicorp/amazon#iam-task-or-instance-role)) plus `iam:PassRole` and `ssm:PutParameter`. |
+| `PAT_TOKEN` | `initiaterelease.yml` | A GitHub fine-grained personal access token used to push the release branch and open the PR. Using a PAT instead of the default `github.token` ensures CI checks (e.g. `static.yml`) are triggered on the release PR. Requires **Contents** (read & write) and **Pull requests** (read & write) permissions on this repository. Generate one under **GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens**. |
 
 ### Variables
 
