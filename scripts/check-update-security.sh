@@ -81,7 +81,7 @@ case "$platform" in
     ;;
 "al2023_gpu")
     ami_path=$AL2023_GPU_PATH
-    instance_type="g4dn.xlarge"
+    instance_type="g5.xlarge"
     ;;
 *)
     error_msg "Incorrect platform selection"
@@ -139,13 +139,29 @@ instance_id=$(aws ec2 run-instances \
     --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value='$platform-check-update-security'}]' |
     jq -r '.Instances[0].InstanceId')
 
+# Read pinned major version for AL2023 GPU filtering
+pinned_major=""
+if [ "$platform" = "al2023_gpu" ]; then
+    pinned_major=$(sed -n '/variable "nvidia_driver_major_al2023" {/,/}/p' variables.pkr.hcl | grep "default" | awk -F '"' '{ print $2 }')
+    if [ -z "$pinned_major" ]; then
+        echo "ERROR: Could not read nvidia_driver_major_al2023 from variables.pkr.hcl"
+        exit 1
+    fi
+fi
+
 # check-update based on platform
 if [[ $platform == al2023* ]]; then
     check_upgrade_options="--sec-severity Critical --exclude=$EXCLUDE_SEC_UPDATES_PKGS"
     if [[ $platform == *gpu ]]; then
-        check_upgrade_options="nvidia-driver-cuda"
+        # dnf check-upgrade only reports the single latest version across all majors,
+        # so it can't detect updates within a pinned major. Instead, query the installed
+        # version and all available within the pinned major, then intersect with GRID bucket locally.
+        gpu_cmd_installed="dnf repoquery --installed --arch=x86_64 --queryformat '%{version}' nvidia-driver-cuda"
+        gpu_cmd_all="dnf repoquery --releasever=latest --disableplugin=versionlock --arch=x86_64 --queryformat '%{version}' nvidia-driver-cuda | grep '^${pinned_major}[.]' | sort -V"
+        command_params="commands=[\"echo INSTALLED=\$(${gpu_cmd_installed})\",\"echo REPO_VERSIONS=\$(${gpu_cmd_all} | paste -sd,)\"]"
+    else
+        command_params="commands=[\"dnf --refresh check-upgrade --releasever=latest --disableplugin=versionlock $check_upgrade_options -q\"]"
     fi
-    command_params="commands=[\"dnf --refresh check-upgrade --releasever=latest $check_upgrade_options -q\"]"
 elif [ "$platform" = "al2_gpu" ]; then
     # The amzn2-nvidia repository does not provide updateinfo metadata (updateinfo.xml),
     # which YUM relies on to classify updates as security-related. The --security flag
@@ -229,6 +245,53 @@ std_output=$(echo "$cmd_output" | jq -r '.StandardOutputContent')
 # Delete the instance
 terminate_out=$(aws ec2 terminate-instances --instance-ids $instance_id)
 
+# AL2023 GPU uses repoquery instead of check-upgrade, handle separately
+if [ "$platform" = "al2023_gpu" ]; then
+    if [ "$cmd_response_code" -ne "$SUCCESS_CODE" ]; then
+        echo "Unknown issue with the command execution"
+        exit 1
+    fi
+
+    installed_version=$(echo "$std_output" | grep "^INSTALLED=" | cut -d'=' -f2)
+    repo_versions_csv=$(echo "$std_output" | grep "^REPO_VERSIONS=" | cut -d'=' -f2)
+
+    if [ -z "$installed_version" ] || [ -z "$repo_versions_csv" ]; then
+        echo "ERROR: Could not determine installed or available NVIDIA driver versions"
+        exit 1
+    fi
+
+    # Get all GRID bucket versions within pinned major
+    grid_versions=$(aws s3 ls --recursive s3://ec2-linux-nvidia-drivers/ --no-sign-request |
+        grep -Eo "(NVIDIA-Linux-x86_64-)[0-9]+\.[0-9]+\.[0-9]+(-grid-aws\.run)" |
+        cut -d'-' -f4 |
+        grep "^${pinned_major}\.")
+    if [ -z "$grid_versions" ]; then
+        echo "ERROR: Could not determine NVIDIA GRID driver versions from S3 for major ${pinned_major}"
+        exit 1
+    fi
+
+    # Find intersection: keep only repo versions that also exist in the GRID bucket,
+    # then pick the latest version as the effective version
+    effective_version=$(echo "$repo_versions_csv" | tr ',' '\n' | grep -v '^$' |
+        grep -xF -f <(echo "$grid_versions") |
+        sort -V | tail -1)
+
+    if [ -z "$effective_version" ]; then
+        echo "ERROR: No common NVIDIA driver version found between repo and GRID bucket for major ${pinned_major}"
+        exit 1
+    fi
+
+    # Only trigger a release if the effective version is newer than installed
+    newer=$(printf '%s\n%s' "$installed_version" "$effective_version" | sort -V | tail -1)
+    if [ "$newer" = "$installed_version" ]; then
+        echo "false"
+        exit 0
+    fi
+
+    echo "true $effective_version"
+    exit 0
+fi
+
 # Return whether update is necessary
 if [ "$cmd_response_code" -eq "$UPDATE_EXISTS_CODE" ]; then
     if [ "$platform" = "al2_gpu" ]; then
@@ -259,8 +322,9 @@ if [ "$cmd_response_code" -eq "$UPDATE_EXISTS_CODE" ]; then
             ;;
         esac
     elif [ "$platform" = "al2023_gpu" ]; then
-        nvidia_driver_version=$(echo "$std_output" | grep "nvidia-driver-cuda" | awk '{print $2}' | cut -d'-' -f1 | sed 's/^[0-9]://')
-        echo "true $nvidia_driver_version"
+        # This path should not be reached; al2023_gpu is handled above via repoquery
+        echo "ERROR: Unexpected al2023_gpu in check-upgrade result path"
+        exit 1
     else
         echo "true"
     fi

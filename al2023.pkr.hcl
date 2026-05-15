@@ -9,6 +9,8 @@ locals {
     ami_version         = "2023.0.${var.ami_version_al2023}"
   }
   merged_tags = merge("${local.default_tags}", "${var.tags}")
+  # Regions where the GRID driver S3 bucket is unavailable
+  skip_grid_driver_regions = "eusc-de-east-1,eu-isoe-west-1"
 }
 
 source "amazon-ebs" "al2023" {
@@ -34,17 +36,19 @@ source "amazon-ebs" "al2023" {
     filters = {
       name = "${var.source_ami_al2023}"
     }
-    owners             = ["amazon"]
+    owners             = var.source_ami_owners
     most_recent        = true
     include_deprecated = true
   }
-  ami_ou_arns   = "${var.ami_ou_arns}"
-  ami_org_arns  = "${var.ami_org_arns}"
-  ami_users     = "${var.ami_users}"
-  ssh_interface = "public_ip"
-  ssh_username  = "ec2-user"
-  tags          = "${local.merged_tags}"
-  run_tags      = "${var.run_tags}"
+  ami_ou_arns          = "${var.ami_ou_arns}"
+  ami_org_arns         = "${var.ami_org_arns}"
+  ami_users            = "${var.ami_users}"
+  ssh_interface        = "${var.ssh_interface}"
+  ssh_username         = "ec2-user"
+  iam_instance_profile = "${var.iam_instance_profile}"
+  subnet_id            = "${var.subnet_id}"
+  tags                 = "${local.merged_tags}"
+  run_tags             = "${var.run_tags}"
 }
 
 build {
@@ -171,6 +175,15 @@ build {
     ]
   }
 
+  provisioner "file" {
+    sources = [
+      "scripts/al2023/neuron/neuron-inf1-downgrade.sh",
+      "scripts/al2023/neuron/neuron-inf1-downgrade.service"
+    ]
+    destination = "/tmp/"
+    only        = ["amazon-ebs.al2023neu"]
+  }
+
   provisioner "shell" {
     environment_vars = [
       "AMI_TYPE=${source.name}"
@@ -185,15 +198,26 @@ build {
     sources = [
       "scripts/al2023/gpu/kmod-util",
       "scripts/al2023/gpu/nvidia-kmod-load.service",
-      "scripts/al2023/gpu/nvidia-kmod-load.sh"
+      "scripts/al2023/gpu/nvidia-kmod-load.sh",
+      "scripts/al2023/gpu/set-nvidia-clocks",
+      "scripts/al2023/gpu/set-nvidia-clocks.service"
     ]
     destination = "/tmp/"
     only        = ["amazon-ebs.al2023gpu"]
   }
 
+  provisioner "file" {
+    source      = "NVIDIA_DRIVER_VERSION"
+    destination = "/tmp/NVIDIA_DRIVER_VERSION"
+    only        = ["amazon-ebs.al2023gpu"]
+  }
+
   provisioner "shell" {
     environment_vars = [
-      "AMI_TYPE=${source.name}"
+      "AMI_TYPE=${source.name}",
+      "AIR_GAPPED=${var.air_gapped}",
+      "REGION=${var.region}",
+      "SKIP_GRID_DRIVER_REGIONS=${local.skip_grid_driver_regions}"
     ]
     scripts = [
       "scripts/al2023/gpu/install-nvidia-driver.sh",

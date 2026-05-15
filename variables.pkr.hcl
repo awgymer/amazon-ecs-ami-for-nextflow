@@ -60,7 +60,7 @@ variable "block_device_throughput" {
 variable "ecs_agent_version" {
   type        = string
   description = "ECS agent version to build AMI with."
-  default     = "1.101.1"
+  default     = "1.103.1"
 }
 
 variable "ecs_init_rev" {
@@ -72,43 +72,43 @@ variable "ecs_init_rev" {
 variable "docker_version" {
   type        = string
   description = "Docker version to build AMI with."
-  default     = "25.0.13"
+  default     = "25.0.14"
 }
 
 variable "containerd_version" {
   type        = string
   description = "Containerd version to build AMI with."
-  default     = "2.1.5"
+  default     = "2.1.7"
 }
 
 variable "runc_version" {
   type        = string
   description = "Runc version to build AMI with."
-  default     = "1.3.3"
+  default     = "1.3.4"
 }
 
 variable "docker_version_al2023" {
   type        = string
   description = "Docker version to build AL2023 AMI with."
-  default     = "25.0.13"
+  default     = "25.0.14"
 }
 
 variable "containerd_version_al2023" {
   type        = string
   description = "Containerd version to build AL2023 AMI with."
-  default     = "2.1.5"
+  default     = "2.2.3"
 }
 
 variable "runc_version_al2023" {
   type        = string
   description = "Runc version to build AL2023 AMI with."
-  default     = "1.3.3"
+  default     = "1.3.4"
 }
 
 variable "exec_ssm_version" {
   type        = string
+  default     = "3.3.4108.0"
   description = "SSM binary version to build ECS exec support with."
-  default     = "3.3.3050.0"
 }
 
 variable "source_ami_al2" {
@@ -139,6 +139,30 @@ variable "source_ami_al2023" {
 variable "source_ami_al2023arm" {
   type        = string
   description = "Amazon Linux 2023 ARM source AMI to build from."
+}
+
+variable "source_ami_owners" {
+  type        = list(string)
+  description = "Accounts to search when filtering source AMIs. Defaults to Amazon-owned AMIs."
+  default     = ["amazon"]
+}
+
+variable "ssh_interface" {
+  type        = string
+  description = "SSH interface for the build instance."
+  default     = "public_ip"
+}
+
+variable "iam_instance_profile" {
+  type        = string
+  description = "IAM instance profile to attach to the build instance. Required when ssh_interface is 'session_manager'."
+  default     = ""
+}
+
+variable "subnet_id" {
+  type        = string
+  description = "VPC subnet ID for the build instance. Must support the connectivity method specified by 'ssh_interface'."
+  default     = ""
 }
 
 variable "kernel_version_al2023" {
@@ -245,4 +269,10 @@ variable "custom_endpoint_ec2" {
   type        = string
   description = "Custom EC2 endpoint to use for building AMIs"
   default     = ""
+}
+
+variable "nvidia_driver_major_al2023" {
+  type        = string
+  description = "Pinned NVIDIA driver major version for AL2023 GPU AMIs. Only driver versions within this major will be installed."
+  default     = "580"
 }

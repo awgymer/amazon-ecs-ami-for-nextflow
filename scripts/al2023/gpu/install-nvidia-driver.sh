@@ -36,6 +36,39 @@ sudo systemctl enable --now dkms
 # nvidia-release creates an nvidia repo file at /etc/yum.repos.d/amazonlinux-nvidia.repo
 sudo dnf install -y nvidia-release
 
+# Temporary fix: ISO regions cannot use dualstack URLs, remove them from the repo file
+if [ -n "$AIR_GAPPED" ]; then
+    echo "ISO regions cannot use dualstack URLs, removing from nvidia repo"
+    sudo sed -i 's/\$dualstack//g' /etc/yum.repos.d/amazonlinux-nvidia.repo
+fi
+
+### Determine NVIDIA driver version ###
+# This script builds and archives three NVIDIA kernel module variants (proprietary,
+# open, and GRID) in /var/lib/dkms-archive. All three must be on the same driver
+# version to ensure proper functionality. The GRID kmod comes from the EC2 GRID
+# .run file in S3, while proprietary and open come from the AL2023 nvidia repo.
+#
+# The exact driver version is determined by the security check script
+# (check-update-security.sh) as the highest version available in BOTH the
+# AL2023 nvidia repo AND the S3 GRID bucket within the pinned major,
+# and tracked in the NVIDIA_DRIVER_VERSION file uploaded by Packer.
+
+NVIDIA_DRIVER_FULL_VERSION=$(grep "^nvidia_driver_version_al2023" /tmp/NVIDIA_DRIVER_VERSION | awk -F'"' '{print $2}')
+if [[ -z "$NVIDIA_DRIVER_FULL_VERSION" ]]; then
+  echo "ERROR: Could not read nvidia_driver_version_al2023 from /tmp/NVIDIA_DRIVER_VERSION"
+  exit 1
+fi
+echo "Using NVIDIA driver version: ${NVIDIA_DRIVER_FULL_VERSION}"
+
+# Some regions do not have access to the GRID driver S3 bucket, skip GRID driver
+skip_grid_driver=""
+if [[ -n "$SKIP_GRID_DRIVER_REGIONS" ]] && echo "$SKIP_GRID_DRIVER_REGIONS" | grep -q -w "$REGION"; then
+  skip_grid_driver="true"
+  echo "Region ${REGION} is in list, skipping GRID driver"
+fi
+
+EC2_GRID_DRIVER_S3_BUCKET="ec2-linux-nvidia-drivers"
+
 ### Kernel Module Archive Functions ###
 # These functions pre-compile and archive different NVIDIA driver variants
 # This allows runtime switching between proprietary, open-source, and GRID drivers
@@ -43,7 +76,7 @@ sudo dnf install -y nvidia-release
 
 # Build and archive proprietary NVIDIA driver
 function archive-proprietary-kmod() {
-  sudo dnf -y install "kmod-nvidia-latest-dkms"
+  sudo dnf -y install "kmod-nvidia-latest-dkms-${NVIDIA_DRIVER_FULL_VERSION}"
 
   NVIDIA_PROPRIETARY_VERSION=$(kmod-util module-version nvidia)
   sudo dkms remove "nvidia/$NVIDIA_PROPRIETARY_VERSION" --all
@@ -66,58 +99,101 @@ function archive-proprietary-kmod() {
 
 # Build and archive open-source NVIDIA driver
 function archive-open-kmod() {
-  sudo dnf -y install "kmod-nvidia-open-dkms"
-  
+  sudo dnf -y install "kmod-nvidia-open-dkms-${NVIDIA_DRIVER_FULL_VERSION}"
+
   NVIDIA_OPEN_VERSION=$(kmod-util module-version nvidia)
   sudo kmod-util archive nvidia
-
-# Prepare source for GRID driver variant (shares same base)
-  sudo mkdir /usr/src/nvidia-grid-$NVIDIA_OPEN_VERSION
-  sudo cp -R /usr/src/nvidia-$NVIDIA_OPEN_VERSION/* /usr/src/nvidia-grid-$NVIDIA_OPEN_VERSION
-
   sudo kmod-util remove nvidia
-}
-
-# Build and archive GRID driver
-function archive-grid-kmod() {
-  NVIDIA_OPEN_VERSION=$(ls -d /usr/src/nvidia-grid-* | sed 's/.*nvidia-grid-//')
-
-  # Rename the DKMS package to avoid conflicts with other driver variants
-  sudo sed -i 's/PACKAGE_NAME="nvidia"/PACKAGE_NAME="nvidia-grid"/g' /usr/src/nvidia-grid-$NVIDIA_OPEN_VERSION/dkms.conf
-
-  # Enable GRID-specific build flags for virtualization support
-  # Ref for build flags: https://github.com/NVIDIA/open-gpu-kernel-modules/blob/2b436058a616676ec888ef3814d1db6b2220f2eb/kernel-open/conftest.sh#L34-L35
-  sudo sed -i "s/MAKE\[0\]=\"'make'/MAKE\[0\]=\"'make' GRID_BUILD=1 GRID_BUILD_CSP=1 /g" /usr/src/nvidia-grid-$NVIDIA_OPEN_VERSION/dkms.conf
-
-  sudo dkms build -m nvidia-grid -v $NVIDIA_OPEN_VERSION
-  sudo dkms install nvidia-grid/$NVIDIA_OPEN_VERSION
-  
-  # Archive and clean up
-  sudo kmod-util archive nvidia-grid
-  sudo kmod-util remove nvidia-grid
   sudo rm -rf /usr/src/nvidia*
 }
 
+# Build and archive GRID driver from EC2 .run file
+function archive-grid-kmod() {
+  local GRID_INSTALLATION_TEMP_DIR
+  local EXTRACT_DIR
+  local NVIDIA_GRID_RUNFILE_KEY
+  local GRID_RUNFILE_NAME
+
+  GRID_INSTALLATION_TEMP_DIR=$(mktemp -d)
+  EXTRACT_DIR="${GRID_INSTALLATION_TEMP_DIR}/NVIDIA-GRID-extract"
+
+  echo "Archiving NVIDIA GRID kernel modules (version ${NVIDIA_DRIVER_FULL_VERSION})"
+
+  NVIDIA_GRID_RUNFILE_KEY=$(aws s3 ls --recursive s3://${EC2_GRID_DRIVER_S3_BUCKET}/ --no-sign-request \
+    | grep "NVIDIA-Linux-x86_64-${NVIDIA_DRIVER_FULL_VERSION}" \
+    | sort -k1,2 \
+    | tail -1 \
+    | awk '{print $4}')
+
+  if [[ -z "$NVIDIA_GRID_RUNFILE_KEY" ]]; then
+    echo "ERROR: No GRID driver found for version ${NVIDIA_DRIVER_FULL_VERSION} in S3"
+    exit 1
+  fi
+
+  echo "Found GRID runfile: ${NVIDIA_GRID_RUNFILE_KEY}"
+  GRID_RUNFILE_NAME=$(basename "${NVIDIA_GRID_RUNFILE_KEY}")
+
+  echo "Downloading GRID driver runfile..."
+  aws s3 cp "s3://${EC2_GRID_DRIVER_S3_BUCKET}/${NVIDIA_GRID_RUNFILE_KEY}" "${GRID_INSTALLATION_TEMP_DIR}/${GRID_RUNFILE_NAME}" --no-sign-request
+  chmod +x "${GRID_INSTALLATION_TEMP_DIR}/${GRID_RUNFILE_NAME}"
+
+  echo "Extracting NVIDIA GRID driver runfile..."
+  sudo "${GRID_INSTALLATION_TEMP_DIR}/${GRID_RUNFILE_NAME}" --extract-only --target "${EXTRACT_DIR}"
+
+  pushd "${EXTRACT_DIR}"
+
+  # Install GRID kernel modules via nvidia-installer
+  echo "Installing NVIDIA GRID kernel modules..."
+  sudo ./nvidia-installer \
+    --dkms \
+    --kernel-module-type open \
+    --silent
+
+  # Rename DKMS package to nvidia-grid to avoid conflicts with other variants
+  sudo dkms remove "nvidia/$NVIDIA_DRIVER_FULL_VERSION" --all
+  sudo sed -i 's/PACKAGE_NAME="nvidia"/PACKAGE_NAME="nvidia-grid"/' /usr/src/nvidia-$NVIDIA_DRIVER_FULL_VERSION/dkms.conf
+  sudo mv /usr/src/nvidia-$NVIDIA_DRIVER_FULL_VERSION /usr/src/nvidia-grid-$NVIDIA_DRIVER_FULL_VERSION
+  sudo dkms add -m nvidia-grid -v $NVIDIA_DRIVER_FULL_VERSION
+  sudo dkms build -m nvidia-grid -v $NVIDIA_DRIVER_FULL_VERSION
+  sudo dkms install -m nvidia-grid -v $NVIDIA_DRIVER_FULL_VERSION
+
+  sudo kmod-util archive nvidia-grid
+  sudo kmod-util remove nvidia-grid
+  sudo rm -rf /usr/src/nvidia-grid*
+
+  popd
+  sudo rm -rf "${GRID_INSTALLATION_TEMP_DIR}"
+}
+
 ### Build All Driver Variants ###
-# Pre-compile and archive all three driver types for runtime flexibility
+if [[ -z "$skip_grid_driver" ]]; then
+  archive-grid-kmod
+fi
 archive-proprietary-kmod
 archive-open-kmod
-archive-grid-kmod
 
 ### Install GPU Drivers and Required Packages ###
-# NVIDIA installation doc: https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/index.html#amazon-installation
+# NVIDIA installation doc: https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/amazon-linux.html
 # Amazon Linux 2023 repost: https://repost.aws/articles/ARwfQMxiC-QMOgWykD9mco1w/install-nvidia-gpu-driver-cuda-toolkit-nvidia-container-toolkit-on-amazon-ec2-instances-running-amazon-linux-2023-al2023
-sudo dnf install -y nvidia-open \
-    nvidia-fabric-manager \
+sudo dnf install -y \
+    "nvidia-driver-${NVIDIA_DRIVER_FULL_VERSION}" \
+    "nvidia-driver-cuda-${NVIDIA_DRIVER_FULL_VERSION}" \
+    "libnvidia-fbc-${NVIDIA_DRIVER_FULL_VERSION}" \
+    "nvidia-libXNVCtrl-${NVIDIA_DRIVER_FULL_VERSION}" \
+    "nvidia-settings-${NVIDIA_DRIVER_FULL_VERSION}" \
+    "nvidia-fabricmanager-${NVIDIA_DRIVER_FULL_VERSION}" \
+    "nvidia-persistenced-${NVIDIA_DRIVER_FULL_VERSION}" \
     pciutils \
     xorg-x11-server-Xorg \
-    nvidia-container-toolkit \
-    oci-add-hooks \
-    nvidia-persistenced
+    nvidia-container-toolkit
 
 # Lock NVIDIA packages to prevent automatic updates
 # Updates can break compatibility between driver and kernel modules
 sudo dnf versionlock 'nvidia*' 'kmod*' 'libnvidia*'
+
+# Ensure gridd.conf exists for the nvidia-gridd service when it starts up
+sudo mkdir -p /etc/nvidia
+echo "EnableUI=FALSE" | sudo tee /etc/nvidia/gridd.conf
 
 ### P6 Instance Support ###
 # Install base requirements
@@ -135,8 +211,18 @@ echo ib_umad | sudo tee /etc/modules-load.d/ib_umad.conf
 # This service runs early in boot to ensure the correct driver is loaded before applications start
 sudo mv /tmp/nvidia-kmod-load.sh /etc/ecs/
 sudo mv /tmp/nvidia-kmod-load.service /etc/systemd/system/nvidia-kmod-load.service
+
+### GPU Clock Pinning Setup ###
+# Pin GPU memory and graphics clocks to max at boot for consistent, predictable performance.
+# Disables dynamic GPU Boost to eliminate clock fluctuation and reduce tail latency jitter.
+# see: https://developer.nvidia.com/blog/advanced-api-performance-setstablepowerstate/
+sudo chmod +x /tmp/set-nvidia-clocks
+sudo mv /tmp/set-nvidia-clocks /usr/bin/set-nvidia-clocks
+sudo mv /tmp/set-nvidia-clocks.service /etc/systemd/system/set-nvidia-clocks.service
+
 sudo systemctl daemon-reload
 sudo systemctl enable nvidia-kmod-load.service
+sudo systemctl enable set-nvidia-clocks.service
 
 ### NVIDIA Service Configuration ###
 # The Fabric Manager service needs to be started and enabled on EC2 P4d instances

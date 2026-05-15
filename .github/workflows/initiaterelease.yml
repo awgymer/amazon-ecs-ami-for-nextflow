@@ -18,10 +18,15 @@ jobs:
       pull-requests: write
     env:
       IAM_INSTANCE_PROFILE_ARN: ${{ secrets.IAM_INSTANCE_PROFILE_ARN }}
-      GH_TOKEN: ${{ github.token }}
     steps:
     - name: Checkout
       uses: actions/checkout@v6
+    - name: Generate App Token
+      id: app-token
+      uses: actions/create-github-app-token@v3
+      with:
+        app-id: ${{ secrets.APP_ID }}
+        private-key: ${{ secrets.APP_PRIVATE_KEY }}
     - name: Create Release Branch
       run: |
         date=$(date '+%Y%m%d')
@@ -31,7 +36,7 @@ jobs:
         # generate-release-vars.sh depends on these packages
         sudo apt-get update && sudo apt-get install libxml2-utils
     - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v5
+      uses: aws-actions/configure-aws-credentials@v6
       with:
         role-to-assume: ${{ secrets.AMI_GENERATE_CONFIG_ROLE }}
         aws-region: us-west-2
@@ -39,6 +44,11 @@ jobs:
       run: |
         git config --global user.name "GenerateConfig Action"
         git config --global user.email "gcaction@github.com"
+        git remote set-url origin https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository }}
+    - name: Save current release values
+      run: |
+        cp release-al2.auto.pkrvars.hcl release-al2.old.values
+        cp release-al2023.auto.pkrvars.hcl release-al2023.old.values
     - name: Check AL2 Update
       run: ./scripts/check-update.sh al2
     - name: Check AL2023 Update
@@ -52,6 +62,11 @@ jobs:
         git diff --cached --quiet
         echo "stage_exit_code=$?" >> "$GITHUB_OUTPUT"
         set -e
+    - name: Generate Changelog
+      if: ${{ steps.stage.outputs.stage_exit_code == 1 }}
+      env:
+        GH_TOKEN: ${{ steps.app-token.outputs.token }}
+      run: ./scripts/generate-changelog.sh
     - name: Commit and Push Changes
       id: push
       if: ${{ steps.stage.outputs.stage_exit_code == 1 }}
@@ -64,6 +79,8 @@ jobs:
     - name: Open PR for Branch
       id: pr
       if: ${{ steps.stage.outputs.stage_exit_code == 1 && steps.push.outputs.push_exit_code == 0 }}
+      env:
+        GH_TOKEN: ${{ steps.app-token.outputs.token }}
       run: |
         date=$(date '+%Y%m%d')
         gh pr create --base main --head release-${date} --title "Release ${date}" --body "Enhanced ECS Optimized AMI Release changes"
@@ -79,16 +96,16 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v6
     - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v5
+      uses: aws-actions/configure-aws-credentials@v6
       with:
         role-to-assume: ${{secrets.AMI_MIRROR_ROLE}}
         aws-region: us-west-2
     - name: Delete shinkansen branch on codecommit repository
       run: |
         aws codecommit delete-branch --repository-name amazon-ecs-ami-mirror --branch-name shinkansen
-    - name: Sleeping for 60 seconds after CodeCommit branch deletion and before recreating it
+    - name: Sleeping for 120 seconds after CodeCommit branch deletion and before recreating it
       run: |
-        sleep 60
+        sleep 120
     - name: Configure prereqs
       run: |
         git config --global user.name "Github Action"
@@ -116,7 +133,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v6
     - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v5
+      uses: aws-actions/configure-aws-credentials@v6
       with:
         role-to-assume: ${{secrets.AMI_MIRROR_ROLE}}
         aws-region: us-west-2
