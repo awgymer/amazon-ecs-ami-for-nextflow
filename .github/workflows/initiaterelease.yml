@@ -17,12 +17,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-      - name: Generate App Token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: Create Release Branch
         run: |
           date=$(date '+%Y%m%d')
@@ -31,17 +25,14 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install libxml2-utils
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ secrets.AMI_GENERATE_CONFIG_ROLE }}
           aws-region: ${{ vars.AWS_REGION }}
       - name: Configure Bot Alias
         run: |
-          git config --global user.name "GenerateConfig Action"
-          git config --global user.email "gcaction@github.com"
-      - name: Save current release values
-        run: |
-          cp release-al2023.auto.pkrvars.hcl release-al2023.old.values
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
       - name: Check AL2023 Update
         run: ./scripts/check-update.sh al2023
       - name: Check for changes
@@ -51,11 +42,6 @@ jobs:
           git diff --cached --quiet
           echo "stage_exit_code=$?" >> "$GITHUB_OUTPUT"
           set -e
-      - name: Generate Changelog
-        if: ${{ steps.stage.outputs.stage_exit_code == 1 }}
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: ./scripts/generate-changelog.sh
       - name: Commit and Push Changes
         id: push
         if: ${{ steps.stage.outputs.stage_exit_code == 1 }}
@@ -66,8 +52,6 @@ jobs:
           echo "push_exit_code=$?" >> "$GITHUB_OUTPUT"
       - name: Open PR for Branch
         if: ${{ steps.stage.outputs.stage_exit_code == 1 && steps.push.outputs.push_exit_code == 0 }}
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           date=$(date '+%Y%m%d')
           gh pr create --base main --head release-${date} --title "Release ${date}" --body "ECS Optimized AMI release"
