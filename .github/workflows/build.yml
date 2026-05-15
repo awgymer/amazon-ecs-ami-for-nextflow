@@ -1,0 +1,34 @@
+name: Build AMIs
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+  workflow_dispatch:
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release-'))
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        variant: [al2023, al2023gpu]
+      fail-fast: false
+    permissions:
+      id-token: write
+      contents: read
+    timeout-minutes: 90
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v5
+      with:
+        role-to-assume: ${{ secrets.PACKER_ROLE_ARN }}
+        aws-region: ${{ vars.AWS_REGION }}
+    - name: Download Packer
+      run: make packer
+    - name: Initialize Packer
+      run: make init
+    - name: Build AMI
+      run: REGION=${{ vars.AWS_REGION }} make ${{ matrix.variant }}
