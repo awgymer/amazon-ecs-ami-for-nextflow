@@ -34,6 +34,7 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}
       - name: Check AL2023 Update
         run: ./scripts/check-update.sh al2023
       - name: Check for changes
@@ -43,6 +44,11 @@ jobs:
           git diff --cached --quiet
           echo "stage_exit_code=$?" >> "$GITHUB_OUTPUT"
           set -e
+      - name: Generate Changelog
+        if: ${{ steps.stage.outputs.stage_exit_code == 1 }}
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: ./scripts/generate-changelog.sh
       - name: Commit and Push Changes
         id: push
         if: ${{ steps.stage.outputs.stage_exit_code == 1 }}
@@ -53,6 +59,8 @@ jobs:
           echo "push_exit_code=$?" >> "$GITHUB_OUTPUT"
       - name: Open PR for Branch
         if: ${{ steps.stage.outputs.stage_exit_code == 1 && steps.push.outputs.push_exit_code == 0 }}
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           date=$(date '+%Y%m%d')
           gh pr create --base main --head release-${date} --title "Release ${date}" --body "ECS Optimized AMI release"
