@@ -107,3 +107,7 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This project is licensed under the Apache-2.0 License.
+
+## CI/CD
+
+For documentation on the GitHub Actions workflows, required secrets, variables, and AWS IAM setup, see [CI_CD_DOCUMENTATION.md](CI_CD_DOCUMENTATION.md).
