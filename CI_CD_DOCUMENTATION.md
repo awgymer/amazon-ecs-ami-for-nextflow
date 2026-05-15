@@ -23,10 +23,12 @@ The update check works by launching a temporary EC2 instance using the current E
 Triggers when a `release-*` branch is merged into `main`, or manually via `workflow_dispatch`. Runs `al2023` and `al2023gpu` builds in parallel using Packer. On success, each built AMI ID is published to SSM Parameter Store at:
 
 ```
-/<ENV>/ecs-ami/<AWS_REGION>/<variant>/latest
+/<environment>/ecs-ami/<AWS_REGION>/<variant>/latest
 ```
 
 For example: `/prod/ecs-ami/us-east-1/al2023/latest`
+
+The environment prefix is derived automatically from the GitHub environment name (`github.environment`), so no additional variable is needed.
 
 SSM Parameter Store automatically retains the full version history of each parameter, so previous AMI IDs remain retrievable by version number.
 
@@ -34,9 +36,9 @@ SSM Parameter Store automatically retains the full version history of each param
 
 ## Required Configuration
 
-### Secrets
+All secrets and variables are configured per GitHub environment. Navigate to **Settings → Environments → prod** to set them.
 
-Configure these under **Settings → Secrets and variables → Actions → Secrets**.
+### Secrets
 
 | Secret | Used by | Description |
 |---|---|---|
@@ -46,12 +48,9 @@ Configure these under **Settings → Secrets and variables → Actions → Secre
 
 ### Variables
 
-Configure these under **Settings → Secrets and variables → Actions → Variables**.
-
 | Variable | Used by | Description | Example |
 |---|---|---|---|
 | `AWS_REGION` | `initiaterelease.yml`, `build.yml` | AWS region to build AMIs in and write SSM parameters to. | `us-east-1` |
-| `ENV` | `build.yml` | Environment name used as the top-level prefix in SSM parameter paths. | `prod` |
 
 ---
 
