@@ -32,3 +32,11 @@ jobs:
       run: make init
     - name: Build AMI
       run: REGION=${{ vars.AWS_REGION }} make ${{ matrix.variant }}
+    - name: Publish AMI ID to SSM
+      run: |
+        ami_id=$(jq -r '.builds[-1].artifact_id | split(":")[1]' manifest.json)
+        aws ssm put-parameter \
+          --name "/${{ vars.ENV }}/ecs-ami/${{ vars.AWS_REGION }}/${{ matrix.variant }}/latest" \
+          --value "$ami_id" \
+          --type String \
+          --overwrite
