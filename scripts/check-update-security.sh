@@ -91,7 +91,7 @@ case "$platform" in
 esac
 
 # Query ssm to get latest ecs optimized ami
-ami_id=$(aws ssm get-parameters --names $ami_path --region us-west-2 | jq -r '.Parameters[0].Value' | jq -r '.image_id')
+ami_id=$(aws ssm get-parameters --names $ami_path --region ap-southeast-2 | jq -r '.Parameters[0].Value' | jq -r '.image_id')
 
 user_data=$(touch user_data.txt)
 if [ "$install_and_start_ssm_agent" -eq 1 ]; then
