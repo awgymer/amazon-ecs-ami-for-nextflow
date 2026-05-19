@@ -35,6 +35,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}
+      - name: Save current release values
+        run: |
+          cp release-al2.auto.pkrvars.hcl release-al2.old.values
+          cp release-al2023.auto.pkrvars.hcl release-al2023.old.values
+      - name: Check AL2 Update
+        run: ./scripts/check-update.sh al2
       - name: Check AL2023 Update
         run: ./scripts/check-update.sh al2023
       - name: Check for changes
