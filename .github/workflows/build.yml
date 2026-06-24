@@ -20,26 +20,26 @@ jobs:
       contents: read
     timeout-minutes: 90
     steps:
-    - name: Checkout
-      uses: actions/checkout@v6
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v5
-      with:
-        role-to-assume: ${{ secrets.PACKER_ROLE_ARN }}
-        aws-region: ${{ vars.AWS_REGION }}
-    - name: Download Packer
-      run: make packer
-    - name: Initialize Packer
-      run: make init
-    - name: Build AMI
-      run: REGION=${{ vars.AWS_REGION }} make ${{ matrix.variant }}
-    - name: Publish AMI ID to SSM
-      env:
-        DEPLOY_ENV: ${{ github.environment }}
-      run: |
-        ami_id=$(jq -r '.builds[-1].artifact_id | split(":")[1]' manifest.json)
-        aws ssm put-parameter \
-          --name "/${DEPLOY_ENV}/ecs-ami/${{ vars.AWS_REGION }}/${{ matrix.variant }}/latest" \
-          --value "$ami_id" \
-          --type String \
-          --overwrite
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.PACKER_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Download Packer
+        run: make packer
+      - name: Initialize Packer
+        run: make init
+      - name: Build AMI
+        run: REGION=${{ vars.AWS_REGION }} make ${{ matrix.variant }}
+      - name: Publish AMI ID to SSM
+        env:
+          DEPLOY_ENV: ${{ github.environment }}
+        run: |
+          ami_id=$(jq -r '.builds[-1].artifact_id | split(":")[1]' manifest.json)
+          aws ssm put-parameter \
+            --name "/${DEPLOY_ENV}/ecs-ami/${{ vars.AWS_REGION }}/${{ matrix.variant }}/latest" \
+            --value "$ami_id" \
+            --type String \
+            --overwrite
