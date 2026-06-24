@@ -60,7 +60,7 @@ variable "block_device_throughput" {
 variable "ecs_agent_version" {
   type        = string
   description = "ECS agent version to build AMI with."
-  default     = "1.103.1"
+  default     = "1.105.0"
 }
 
 variable "ecs_init_rev" {
