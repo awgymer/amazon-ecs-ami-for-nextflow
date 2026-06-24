@@ -66,6 +66,7 @@ jobs:
           git push --set-upstream origin release-${date}
           echo "push_exit_code=$?" >> "$GITHUB_OUTPUT"
       - name: Open PR for Branch
+        id: pr
         if: ${{ steps.stage.outputs.stage_exit_code == 1 && steps.push.outputs.push_exit_code == 0 }}
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
