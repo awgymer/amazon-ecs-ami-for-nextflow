@@ -4,6 +4,56 @@
 - [Amazon Linux 2023 release notes](https://docs.aws.amazon.com/linux/al2023/release-notes/relnotes.html)
 - [Amazon Linux 2 release notes](https://docs.aws.amazon.com/AL2/latest/relnotes/relnotes-al2.html)
 
+## 20260618
+- al2, al2023 ami version: 20260618
+- ecs version: 1.105.0
+- enhancement - Update ECS Agent version to 1.105.0 [#719](https://github.com/aws/amazon-ecs-ami/pull/719)
+
+## 20260615
+- al2, al2023 ami version: 20260615
+- source al2 ami: amzn2-ami-minimal-hvm-2.0.20260615.0-x86_64-ebs
+- source al2 arm ami: amzn2-ami-minimal-hvm-2.0.20260615.0-arm64-ebs
+- source al2 kernel 5.10 ami: amzn2-ami-minimal-hvm-2.0.20260615.0-x86_64-ebs
+- source al2 kernel 5.10 arm ami: amzn2-ami-minimal-hvm-2.0.20260615.0-arm64-ebs
+- source al2023 ami: al2023-ami-minimal-2023.12.20260611.0-kernel-6.1-x86_64
+- source al2023 arm ami: al2023-ami-minimal-2023.12.20260611.0-kernel-6.1-arm64
+- bugfix - Add post-reboot barrier in al2023neu build to prevent reuse of the pre-reboot session before neuron upload [#715](https://github.com/aws/amazon-ecs-ami/pull/715)
+
+## 20260609
+- al2, al2023 ami version: 20260609
+- ecs version: 1.104.0
+- source al2 ami: amzn2-ami-minimal-hvm-2.0.20260608.0-x86_64-ebs
+- source al2 arm ami: amzn2-ami-minimal-hvm-2.0.20260608.0-arm64-ebs
+- source al2 kernel 5.10 ami: amzn2-ami-minimal-hvm-2.0.20260608.0-x86_64-ebs
+- source al2 kernel 5.10 arm ami: amzn2-ami-minimal-hvm-2.0.20260608.0-arm64-ebs
+- source al2023 ami: al2023-ami-minimal-2023.12.20260608.0-kernel-6.1-x86_64
+- source al2023 arm ami: al2023-ami-minimal-2023.12.20260608.0-kernel-6.1-arm64
+- enhancement - Update ECS Agent version to 1.104.0 [#713](https://github.com/aws/amazon-ecs-ami/pull/713)
+- enhancement - Update SSM GPG key for ECS Exec [#710](https://github.com/aws/amazon-ecs-ami/pull/710)
+
+## 20260527
+- al2, al2023 ami version: 20260527
+- source al2 ami: amzn2-ami-minimal-hvm-2.0.20260526.0-x86_64-ebs
+- source al2 arm ami: amzn2-ami-minimal-hvm-2.0.20260526.0-arm64-ebs
+- source al2 kernel 5.10 ami: amzn2-ami-minimal-hvm-2.0.20260526.0-x86_64-ebs
+- source al2 kernel 5.10 arm ami: amzn2-ami-minimal-hvm-2.0.20260526.0-arm64-ebs
+- source al2023 ami: al2023-ami-minimal-2023.11.20260526.0-kernel-6.1-x86_64
+- source al2023 arm ami: al2023-ami-minimal-2023.11.20260526.0-kernel-6.1-arm64
+
+## 20260525
+- al2, al2023 ami version: 20260525
+- ecs version: 1.103.2
+- enhancement: Update ECS Agent version to 1.103.2 [#706](https://github.com/aws/amazon-ecs-ami/pull/706)
+
+## 20260518
+- al2, al2023 ami version: 20260518
+- source al2 ami: amzn2-ami-minimal-hvm-2.0.20260515.0-x86_64-ebs
+- source al2 arm ami: amzn2-ami-minimal-hvm-2.0.20260515.0-arm64-ebs
+- source al2 kernel 5.10 ami: amzn2-ami-minimal-hvm-2.0.20260515.0-x86_64-ebs
+- source al2 kernel 5.10 arm ami: amzn2-ami-minimal-hvm-2.0.20260515.0-arm64-ebs
+- source al2023 ami: al2023-ami-minimal-2023.11.20260514.0-kernel-6.1-x86_64
+- source al2023 arm ami: al2023-ami-minimal-2023.11.20260514.0-kernel-6.1-arm64
+
 ## 20260514
 - al2, al2023 ami version: 20260514
 - source al2 ami: amzn2-ami-minimal-hvm-2.0.20260511.1-x86_64-ebs
